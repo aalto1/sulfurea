@@ -53,6 +53,7 @@ leg.basis.vec = Vectorize(leg.basis)
 
 # Plot first five Legendre polynomials
 library(RColorBrewer)
+par(mfrow=c(1,1))
 mycol = brewer.pal(5, "Blues")
 # Declare the lwd of the plot
 plot_lty=c(1,2,3,4,1)
@@ -103,10 +104,9 @@ beta_integral = function(j) {
 
 # Evaluate the first 200 Fourier coefficients of h in the Legendre basis
 beta = beta_integral(200)
-```
 
-# Plot beta 
-par(mfrow=c(1,1))
+
+# Plot beta's
 plot(seq(1,200, by=1),beta, type="h", main = 'Fourier Coefficients : j in {0, 1, .., 200}', xlab = 'j', ylab = expression(beta[j]))
 
 
@@ -128,7 +128,6 @@ h_j = function (x, j, b){
 
 
 #Plot the linear approximation on the target function
-par(mfrow=c(1,1))
 curve(h_x(x), xlim = c(-1,1), ylab = expression(h(x)), main = 'Doppler function in [-1,1] :: Approximate g, J = 50', col = 'green', lwd = 5)
 curve(h_j(x, 50, beta[1:50]), xlim = c(-1,1), add = T, lty = 2, col = 'black')
 legend('bottomright', legend = c('Doppler', 'g_J = 50'), col = c('green', 'black'), lty = c(1, 2), text.width = 0.5)
