@@ -136,7 +136,7 @@ legend('bottomright', legend = c('Doppler', 'g_J = 50'), col = c('green', 'black
 curve(h_x(x), xlim = c(-1,1), ylab = expression(h(x)), main = 'Doppler function in [-1,1] :: Approximate g, J = 50', col = 'pink', lwd = 5)
 curve(h_j(x, 100, beta[1:100]), xlim = c(-1,1), add = T, lty = 2, col = 'black')
 legend('bottomright', legend = c('Doppler', 'g_J = 100'), col = c('pink', 'black'), lty = c(1, 2), text.width = 0.5)
-```
+
 
 # EVALUATE THE LINEAR APPROXIMATION ----------------------------------------------
 
