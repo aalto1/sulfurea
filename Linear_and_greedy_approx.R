@@ -129,13 +129,15 @@ h_j = function (x, j, b){
 
 #Plot the linear approximation on the target function
 par(mfrow=c(1,1))
+curve(h_x(x), xlim = c(-1,1), ylab = expression('h'['J = 50']^'*'~'(x)'), main = expression('Doppler function in [-1,1] :: Approximate'~'h'['J = 50']^'*'), col = 'green', lwd = 5)
+
 curve(h_x(x), xlim = c(-1,1), ylab = expression(h(x)), main = 'Doppler function in [-1,1] :: Approximate g, J = 50', col = 'green', lwd = 5)
 curve(h_j(x, 50, beta[1:50]), xlim = c(-1,1), add = T, lty = 2, col = 'black')
-legend('bottomright', legend = c('Doppler', 'g_J = 50'), col = c('green', 'black'), lty = c(1, 2), text.width = 0.5)
+legend('bottomright', legend = c('Doppler', expression('h'['J = 50']))), col = c('green', 'black'), lty = c(1, 2), text.width = 0.5)
 
-curve(h_x(x), xlim = c(-1,1), ylab = expression(h(x)), main = 'Doppler function in [-1,1] :: Approximate g, J = 50', col = 'pink', lwd = 5)
+curve(h_x(x), xlim = c(-1,1), ylab = expression('h'['J = 100']^'*'~'(x)'), main = expression('Doppler function in [-1,1] :: Approximate'~'h'['J = 100']^'*'), col = 'pink', lwd = 5)
 curve(h_j(x, 100, beta[1:100]), xlim = c(-1,1), add = T, lty = 2, col = 'black')
-legend('bottomright', legend = c('Doppler', 'g_J = 100'), col = c('pink', 'black'), lty = c(1, 2), text.width = 0.5)
+legend('bottomright', legend = c('Doppler', expression('h'['J = 100']))), col = c('pink', 'black'), lty = c(1, 2), text.width = 0.5)
 
 
 # EVALUATE THE LINEAR APPROXIMATION ----------------------------------------------
@@ -168,11 +170,11 @@ h_j_star = function (x, j, b){
 
 # Plot of the non-linear approximation on the target functino
 par(mfrow=c(1,1))
-curve(h_x(x), xlim = c(-1,1), ylab = expression(h(x)), main = 'Doppler function in [-1,1] :: Approximate g*, J = 50', col = 'green', lwd = 5)
+curve(h_x(x), xlim = c(-1,1), ylab = expression('h'['J = 50']^'*'~'(x)'), main = expression('Doppler function in [-1,1] :: Approximate'~'h'['J = 50']^'*'), col = 'green', lwd = 5)
 curve(h_j_star(x, 50, beta[1:50]), xlim = c(-1,1), add = T, lty = 2, col = 'black')
 legend('bottomright', legend = c('Doppler', 'g*_J = 50'), col = c('green', 'black'), lty = c(1, 2), text.width = 0.5)
 
-curve(h_x(x), xlim = c(-1,1), ylab = expression(h(x)), main = 'Doppler function in [-1,1] :: Approximate g*, J = 50', col = 'pink', lwd = 5)
+curve(h_x(x), xlim = c(-1,1), ylab = expression('h'['J = 100']^'*'~'(x)'), main = expression('Doppler function in [-1,1] :: Approximate'~'h'['J = 100']^'*'), col = 'pink', lwd = 5)
 curve(h_j_star(x, 100, beta[1:100]), xlim = c(-1,1), add = T, lty = 2, col = 'black')
 legend('bottomright', legend = c('Doppler', 'g*_J = 100'), col = c('pink', 'black'), lty = c(1, 2), text.width = 0.5)
 
