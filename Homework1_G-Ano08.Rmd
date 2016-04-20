@@ -1,0 +1,1111 @@
+---
+title: "Homework 1"
+author: "G-Ano08"
+date: "20 April 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+library(knitr)
+library(rgl)
+knit_hooks$set(webgl = hook_webgl)
+```
+
+## Exercise 1
+
+### 1.1
+
+The aim of the exercise is to built an approximation of the target function $h(x) = g(0.5(x+1))$, where 
+$$g(x)=\sqrt{x(1-x)} sin \left ( \frac{2.1\pi}{x+0.05} \right )$$
+
+```{r Exercise 1 Target function Doppler}
+# Define the target function
+
+# Doppler function scaled in [0,1]
+doppler.fun <-  function(x){
+"This function returns the Doppler function in [0,1]:
+  x : function argument in [0,1]"
+  out = sqrt(x*(1 - x))*sin( (2.1*pi)/(x + 0.05) )
+  return(out)
+}
+
+# Doppler function scaled in [-1,1]
+h_x = function(x){
+"This function returns the Doppler function scaled in [-1,1]:
+  x : function argument in [-1,1]"
+  return(doppler.fun(0.5*(x+1)))
+}
+```
+
+```{r doppler plot, echo=FALSE, include = TRUE, fig.width=7, fig.height=4, fig.align='center' , tidy=TRUE}
+par(mfrow=c(1,2))
+curve(doppler.fun, ylab = expression(g(x)), main = 'Doppler function in [0,1]', col = 'blue')
+curve(h_x(x), xlim = c(-1,1), ylab = expression(h(x)), main = 'Doppler function in [-1,1]', col = 'blue')
+```
+
+In order to estimate an approximation of the function we need to be sure that all the requirements are satisfied.
+
+First of all we know that the function space $\texttt{L}_2([-1,1])$ is defined as 
+
+$$\texttt{L}_2([-1,1]) = \left \{ h : [-1,1]  \mapsto   \mathbb{R} \quad  such \quad that \quad \left \| h \right \|_2 = \int_{-1}^{1}\left | h(x) \right |^2\mathrm{d} x < \infty \right \}$$
+
+and is known as *Hilbert space*. In this space is defined the *inner product* between two functions $f(\cdot)$ $h(\cdot)$ as follows
+
+$$\left \langle f, h \right \rangle_{\texttt{L}_2} = \int_{-1}^{1} f(x)h(x)\mathrm{d} x.$$
+
+Furthermore, the *Hilbert space* is defined as *separable*, hence it is possible to define a *countable* orthonormal basis $\left \{ \phi_0(\cdot ), \phi_1(\cdot ), \dots \right \}$.
+
+The basis that we consider in this case is the *Legendre*, a typical polynomial extension used for the function defined in [-1,1]. The polynomial $P_j(x)$ of the *Legendre* extension are orthogonal but not orthonormal, so we define a modified version $Q_j(x) = \sqrt{\frac{(2j+1)}{2}}P_j(x)$ which forms an orthonormal basis for $\texttt{L}_2([-1,1])$.
+
+```{r Exercise 1.1, tidy=TRUE}
+# Set up the function to construct iteratively the Legendre basis
+leg.basis = function(x, j) {
+"The function returns the list of the orthogonal and orthonormal basis vectors."
+  if (j == 0)
+    p = 1
+  else if (j == 1)
+    p = x
+  else {
+    # Define the Legendre polynomial p_(j)
+    p = x
+    # Define the Legendre polynomial p_(j-1)
+    p_1 = 1
+    for (k in 1:(j-1)){
+      # Compute the Legendre polynomial p_(j+1)
+      p_next = ((2 * k + 1) * x * p - k * p_1) / (k+1)
+      p_1 = p
+      p = p_next
+    }
+  }
+  # Orthonormalize the basis vectors
+  q = sqrt((2*j+1)/2) * p
+  return (list(p,q))
+}
+# Vectorize the function
+leg.basis.vec = Vectorize(leg.basis)
+```
+
+\clearpage 
+
+Once we obtain the modified *Legendre* extension we plot the first five orthonormal basis vectors.
+
+```{r Plot Legendre polynomials, echo=FALSE, include = TRUE, fig.width=5, fig.height=5, fig.align='center', tidy=TRUE}
+library(RColorBrewer)
+mycol = brewer.pal(5, "Blues")
+# Declare the lwd of the plot
+plot_lty=c(1,2,3,4,1)
+# Plot the first file Legendre the polynomials 
+for (j in 0 : 4){
+  curve(leg.basis.vec(x,j)[2,], n = 501,  ylim = c(-3,3), xlim=c(-1,1), add=(j!=0),
+        col = mycol[j+1], lty=plot_lty[j+1], lwd = 2, xlab = 'x', ylab = expression(phi[j](x)),
+        main = 'Legendre polynomials in [-1,1]')
+  }
+abline(v=0, h=0)
+legend('bottomright', c("Q_0(x)","Q_1(x)","Q_2(x)","Q_3(x)","Q_4(x)"), lty=c(1,2,3,4,1), col=mycol,
+       bty="n", cex=0.75, inset=0.05, horiz=F)
+```
+
+To be sure that the modified basis is orthonormal we build a matrix which shows the result of $\left \langle \phi_{j1},\phi_{j2} \right \rangle_{\texttt{L}_2}$ for all $j_1,j_2 = \{0,1,\dots\}$.
+
+```{r Exercise Verify the orthogonality}
+grade=5
+# Declare a NA matrix
+orth_leg.basis = matrix(nrow=grade, ncol=grade)
+# Fill in the matrix : m(j,k) = p_(j)*p_(k)
+for (j in 0 : (grade-1)){
+  for (k in 0 : (grade-1)){
+# Compute the integral in [-1,1] to verify that the basis elements satisfy the requirements
+    orth_leg.basis[(j+1),(k+1)] = round( integrate(function(x, j1, j2) 
+                                  unlist(leg.basis.vec(x, j1)[2,]) * 
+                                  unlist(leg.basis.vec(x, j2)[2,]),
+                                  lower = -1, upper = 1, j1 = k, j2 = j)$value, 5)
+    }
+  }
+
+orth_leg.basis
+```
+
+As we expect 
+
+$$
+\begin{cases}
+&\left \langle \phi_{j_{1}},\phi_{j_{2}} \right \rangle_{\texttt{L}_2}  = 0 \qquad \forall \quad j_{1} \neq j_{2}\\ 
+&\left \| \phi_j \right \|_{\texttt{L}_2}  = 1 \qquad \forall \quad j.\\
+\end{cases}
+$$
+
+### 1.2 (a)
+
+Once we verify the existence of the orthonormal basis of $\texttt{L}_2([-1,1])$, we check whether our target function $h(x) \in  \texttt{L}_2([-1,1])$. To prove that we show that
+
+$$\left \| h \right \|_2 = \int_{-1}^{1}\left | h(x) \right |^2 \mathrm{d} x < \infty$$
+
+```{r h in L}
+integrate(function(x){return (  (abs(h_x(x)))^2)  }, lower = -1, upper = 1)
+```
+
+The value obtained is finite, so our target function $h(x) \in \texttt{L}_2([-1,1])$.
+
+
+Thus, follows that 
+
+$$h(x) =\sum_{j = 0}^{\infty} \beta_j \phi_j(x).$$
+
+The result mentioned above stands if and only if
+
+$$\int_{-1}^{1} h(x) \phi_i(x) \mathrm{d}x = \sum_{j = 0}^{\infty} \beta_j\int_{-1}^{1} \phi_j(x)\phi_i(x)\mathrm{d}x$$
+
+(obtained multiplying each side of the equation by $\phi_i(x)$ and applying the inner product definition)
+
+$$\Downarrow$$
+
+$$\left \langle h,\phi_i \right \rangle = \sum_{j=0}^{\infty}\beta_j \underset{\delta_{ji} = \left\{\begin{matrix}
+0 & j \neq i\\ 
+ 1 & j = i
+\end{matrix}\right.}{\underbrace{\left \langle \phi_j,\phi_i \right \rangle}} \Leftrightarrow \left \langle h, \phi_i \right \rangle = \beta_i
+$$
+
+In particular the coefficient $\beta_i$ corresponds to the *Fourier coefficients* that are the ones that return the best approximation. 
+
+\clearpage
+
+It can be proved as follows:
+
+
+Given
+
+*  $\{\beta_j\}_j$ : the sequence of the Fourier coefficients
+*  $\{\alpha_j\}_j$ : a generic numeric sequence
+
+$$\left \| h - \sum_{j = 0}^{J-1} \beta_j \phi_j\right \|_2^2 \leqslant \left \| h - \sum_{j = 0}^{J-1} \alpha_j \phi_j\right \|_2^2$$
+
+$$\Downarrow$$
+
+\begin{align*}
+\left \| h - \sum_{j = 0}^{J-1} \alpha_j \phi_j\right \|_2^2 &= 
+\left \langle h- \sum_{j = 0}^{J-1} \alpha_j \phi_j,  h- \sum_{j = 0}^{J-1} \alpha_j \phi_j  \right \rangle &\\
+&= \left \langle h, h \right \rangle - 
+\sum_{j = 0}^{J-1} \alpha_j \underset{\beta_j}{\underbrace{\left \langle h, \phi_j \right \rangle}} -
+\sum_{j = 0}^{J-1} \alpha_j \underset{\beta_j}{\underbrace{\left \langle h, \phi_j \right \rangle}} +
+\sum_{j = 0}^{J-1} |\alpha_j|^2 \underset{1}{\underbrace{\left \langle \phi_j, \phi_j \right \rangle}} &\\
+&= \left \langle h, h \right \rangle + \underset{\sum_{j = 0}^{J-1} |\alpha_j - \beta_j|^2}{\underbrace{\left[ \sum_{j = 0}^{J-1} |\alpha_j|^2 - 2\sum_{j = 0}^{J-1} \alpha_j \beta_j + \sum_{j = 0}^{J-1} |\beta_j|^2 \right]}} - \sum_{j = 0}^{J-1} |\beta_j|^2 &\\
+&= \underset{ > 0}{\underbrace{\sum_{j = 0}^{J-1} |\alpha_j - \beta_j|^2}} + \left \| h - \sum_{j = 0}^{J-1} \beta_j \phi_j\right \|_2^2\\
+\end{align*}
+
+Thus, we define the generalized Fourier coefficient, $\beta_j$, in the *Legendre* basis 
+
+$$\beta_j = \left \langle h,\phi_j \right \rangle_{\texttt{L}_2} = \int_{-1}^{1} h(x)\phi_j(x)\mathrm{d} x.$$
+
+and evaluate the first 200.
+
+```{r ex1 fourier coeff}
+# Define the coefficients function
+beta_integral = function(j) {
+  "This function return the vector of Fourier coefficients. It's lenght depend on:
+  - j : length of the vector."
+  beta=c()
+  # Compute Beta as the integral in [-1,1] of the inner product btw g and phi
+  for (i in 0:(j-1)) {
+    beta = c(beta, integrate(function(x) h_x(x) * unlist(leg.basis.vec(x,i)[2,]),
+                             lower=-1, upper=1)$value) 
+  }
+  return(beta)
+}
+
+# Evaluate the first 200 Fourier coefficients of h in the Legendre basis
+beta = beta_integral(200)
+```
+
+```{r beta plot, echo=FALSE, include = TRUE, fig.width=4, fig.height=4, fig.align='center', tidy=TRUE }
+par(mfrow=c(1,1))
+plot(seq(1,200, by=1),beta, type="h", main = 'Fourier Coefficients : j in {0, 1, ... , 200}', xlab = 'j', ylab = expression(beta[j]))
+```
+
+### 1.2 (b)
+
+Moreover we can affirm that $h_J(x) = \sum_{j = 0}^{J-1}\beta_j \phi_j(x)$ is the element of $\texttt{L}_2([-1,1])$ that minimizes the $\left \| h(x)-h_J(x) \right \|^2_{L_2}$, and it is called the J-*term linear approximation* of $h(x)$.
+
+In particular $h_J(x)$ is the *projection* of $h(x)$ onto the *span* of $\left \{ \phi_0(\cdot ), \dots,  \phi_{J-1}(\cdot ) \right \}$. We can prove it veryifing that $\left \langle \pi (h), h - \pi (h) \right \rangle = 0$, so the *projection* of $h(x)$ onto the *span* of $\left \{ \phi_0(\cdot ), \dots,  \phi_{J-1}(\cdot ) \right \}$ is orthogonal respect to the differerence between $h(x)$ and the *projection*.
+
+$$ \left \langle \pi (h), h - \pi (h) \right \rangle = \left \langle \sum_{j = 0}^{J-1}\beta_j \phi_j(x), h - \sum_{j = 0}^{J-1}\beta_j \phi_j(x) \right \rangle  = \left \langle \sum_{j = 0}^{J-1}\beta_j \phi_j(x), h \right \rangle - \left \langle  \sum_{j = 0}^{J-1}\beta_j \phi_j(x),  \sum_{j = 0}^{J-1}\beta_j \phi_j(x) \right \rangle$$
+
+$$\Downarrow$$
+
+$$ \sum_{j = 0}^{J-1}\beta_j \underset{\beta_j}{\underbrace{\int^{-1}_{1} \phi_j(x) h(x) \mathrm{d}x}} - \sum_{j = 0}^{J-1}|\beta_j|^2 \underset{1}{\underbrace{\int^{-1}_{1}\phi_j^2(x) \mathrm{d}x}}= 0$$
+
+Thus, we are capable to built two *linear approximations*, one for $J = 50$, the other for $J = 100$ and then we can evaluate their squared distance from the target given:
+
+$$\left \| h(x)-h_J(x) \right \|^2_{L_2} = \int_{-1}^{1}(h(x)-h_J(x))^2\mathrm{d}x$$
+
+```{r linear approx}
+# Built two linear approximations for the target function.
+# Set up the function to compute the approximation of the target function
+h_j = function (x, j, b){
+  "This function returns the value of the approximation function given:
+  - x : the value in which I compute the function;
+  - j : the j-th term for the non-linear approximation;
+  - b : the vector of Beta's related to j."
+  out = 0
+  for (k in 0 : (j-1)){
+    out = out + b[k+1] * unlist(leg.basis.vec(x, k)[2,])
+  }
+  return (out)
+}
+```
+
+To have an idea on how the story ends..
+
+```{r linear approx ex1, echo=FALSE, include = TRUE, fig.width=8, fig.height=4, fig.align='center' , tidy=TRUE}
+par(mfrow=c(1,1))
+curve(h_j(x, 50, beta), xlim = c(-1,1), lwd = 2, col = 'green', main = 'Doppler function in [-1,1] :: Approximate h, J = 50', ylab = expression(h(x)))
+curve(h_x(x), xlim = c(-1,1), col = 'black', lty = 1, add = TRUE)
+legend('bottomright', legend = c('Doppler', expression('h'['J = 50'])), col = c('black', 'green'), lty = c(1, 1), text.width = 0.5, lwd = c(1,2))
+
+
+curve(h_j(x, 100, beta), xlim = c(-1,1), lwd = 2, col = 'pink', main = 'Doppler function in [-1,1] :: Approximate h, J = 100', ylab = expression(h(x)))
+curve(h_x(x), xlim = c(-1,1), col = 'black', lty = 1, add = TRUE)
+legend('bottomright', legend = c('Doppler', expression('h'['J = 100'])), col = c('black', 'pink'), lty = c(1, 1), text.width = 0.5, lwd = c(1,2))
+```
+
+As we can observe in the figure, the linear approximation obtained cutting $J = 50$ is not extremely different from the one obtained fixing $J = 100$, except for $x \in [-1,-0.5]$ where the latter is remarkably better.
+
+We can verify it also numerically..
+
+```{r linear approx err, tidy=TRUE}
+# One where J = 50
+integrate(function(x) (h_x(x) - h_j(x, 50, beta))^2, lower=-1, upper=1)$value
+# The other for J = 100
+integrate(function(x) (h_x(x) - h_j(x, 100, beta))^2, lower=-1, upper=1)$value
+```
+
+
+.. the squared distances from the target differ for a 10 factor that highly probably depends on the better approximation( $J = 100$) in the interval mentioned above.
+
+We can also imagine to increase the value of J, but according to the fact that the values of $\beta_j$'s for $J > 100$ are small, the improvement of the approximation will not be so significant.
+
+### 1.2 (c)
+
+Now, define $A_j$ as a non linear space that contains all the functions in the form $\sum_{j = 1}^{\infty}a_j \phi_j(x)$ such that at most *J* of the $a_j$'s are non-zero. 
+
+In this space the best approximation to the function $h(x)$ is
+
+$$h^*_J(x) = \sum_{j \in \Lambda_J}\beta_j\phi_j(x),$$
+
+where $\Lambda_J$ are the J indices corresponding to the J biggest coefficients |$\beta_j$|'s. That is because $\beta$ evaluates the covariace in the continuous space and, in particular, it shows how close the function is  to the basis elements (big values of $\beta$ mean that the function is strictly related to the basis).
+
+In particular, for the two cases we present $\Lambda_J$ is composed respectively by 50 and 100 J's.
+
+```{r nonlinear approx}
+# In order to compute the greedy approximation define the followinf function
+h_j_star = function (x, j, b){
+  "This function returns the value of the approximation function given:
+  - x : the value in which I compute the function;
+  - j : the j-th term for the non-linear approximation;
+  - b : the vector of Beta's related to j."
+  out = 0
+  # Put equal to zero all the beta's smaller than the j-th term.
+  b[abs(b) < sort(abs(b), decreasing = TRUE)[j]] = 0
+  for (k in 0:(length(b)-1)){
+    out = out + b[k+1] * unlist(leg.basis.vec(x,k)[2,])
+  }
+  return (out)
+}
+```
+
+```{r non linear approx ex1, echo=FALSE, include = TRUE, fig.width=8, fig.height=4, fig.align='center' , tidy=TRUE}
+par(mfrow=c(1,1))
+curve(h_j_star(x, 50, beta), xlim = c(-1,1), lwd = 2, col = 'green', main = 'Doppler function in [-1,1] :: Approximate h*, J = 50', ylab = expression(h(x)))
+curve(h_x(x), xlim = c(-1,1), col = 'black', lty = 1, add = TRUE)
+legend('bottomright', legend = c('Doppler', expression('h*'['J = 50'])), col = c('black', 'green'), lty = c(1, 1), text.width = 0.5, lwd = c(1,2))
+
+curve(h_j_star(x, 100, beta), xlim = c(-1,1), lwd = 2, col = 'pink', ylab = expression(h(x)), main = 'Doppler function in [-1,1] :: Approximate h*, J = 100')
+curve(h_x(x), xlim = c(-1,1), col = 'black', lty = 1, add = TRUE)
+legend('bottomright', legend = c('Doppler', expression('h*'['J = 100'])), col = c('black', 'pink'), lty = c(1, 1), text.width = 0.5, lwd = c(1,2))
+```
+
+Then we evaluate our approximations.
+
+```{r non linear approx err, tidy=TRUE}
+# Evaluate the approximation for j = 50
+integrate(function(x) (h_x(x) - h_j_star(x, 50, beta))^2, lower=-1, upper=1)$value
+# Do the same for j = 100
+integrate(function(x) (h_x(x) - h_j_star(x, 100, beta))^2, lower=-1, upper=1)$value
+```
+
+As we see from the plots, both the *linear* and the *non-linear* approximations return passing approximation of the target function. We explain this result according to the plot of $\beta$'s. Infact also the not-ordered $\beta$'s assume higher values for the smaller values of $J$'s, hence the coefficients used for the *linear* and the *non-linear* approximations are almost the same. 
+
+For example try to analyze beta vector for $J=50$:
+
+```{r beta comparison, tidy=TRUE}
+# Get the beta's captured by the lineare approximation with J = 50
+b_j = beta[1:50]
+b_j
+# Pick also the one used by the non-linear estimator
+b_j_star = beta[abs(beta) >= sort(abs(beta), decreasing = TRUE)[50]]
+b_j_star
+# Count the beta in common for the two approximations
+num.common.beta = length(intersect(b_j,b_j_star))
+num.common.beta
+```
+
+Here we see that the two different approximation have in common 40 out of 50 values of $\beta$.
+
+```{r beta comparison 2, tidy=TRUE}
+# Do the same but considering how beta* deviates from beta
+beta.ind = tail(which(abs(beta) >= sort(abs(beta), decreasing = TRUE)[50], arr.ind = T),1)
+over = sum(which(abs(beta) >= sort(abs(beta), decreasing = TRUE)[50], arr.ind = T) > 50)
+over
+```
+
+Here we observe that the two $\beta$'s vectors differentiate for 10 coefficients.
+
+```{r beta comparison 3, tidy=TRUE}
+#Show the vector of beta's up to index 72 and hold equal to 0 the not used.
+b=beta
+b[abs(b) < sort(abs(b), decreasing = TRUE)[50]] = 0
+b[1:beta.ind]
+```
+
+Evaluating numerically the loss of the the *linear* and the *non-linear* approximations we see that the former is greater than the latter, it depends on the fact that the *linear* approximation also takes into account some values of $\beta$ that are small. 
+
+\clearpage
+
+
+
+
+## Exercise 2
+### 2.1
+
+In order to compute a *linear* approximation of the function
+
+$$g(x_1,x_2) = x_1 + cos(x_2)$$
+
+we are going to define some general functions that will be used later for the further analysis.
+
+First of all we define and the target function that corresponds to the one mentioned above.
+
+
+```{r Target, tidy=TRUE, warning=FALSE}
+# Define a target function -----------------------------------------
+library(plot3D)
+library(rgl)
+library(plot3D)
+
+# Define the target function that we want to approximate
+target.fun = function(x_1, x_2){
+  z = outer(x_1, x_2, FUN = function (x,y) {out = x + cos(y); return(out)})
+  return(z)
+}
+```
+```{r Plot Target, tidy=TRUE, echo=FALSE, include = TRUE, fig.align='center', webgl=TRUE}
+# Declare the range of values (x1,x2) used to plot the target function
+x1 = seq(0, 1, by = 0.01)
+x2 = seq(0, 1, by = 0.01)
+f = target.fun(x1,x2)
+# Plot the target function
+persp3d(f,col = 'red', border = "yellow")
+persp3D(x1, x2, f,col = 'red', border = "yellow")
+```
+Click [**here**](https://dl.dropboxusercontent.com/s/oprtin9xai7swdo/3DPlot_001.html?dl=0) to see the 3D plot.
+
+Thus, we verify if the function lies in the *Hilbert space*, $\texttt{L}_2([0,1] \times [0,1])$. In particular it belongs to the space if $$\int_{0}^{1}\int_{0}^{1}|g(x_1,x_2)|^2 \mathrm{d}x_1\mathrm{d}x_2 < \infty$$
+
+```{r Hilbert Space, tidy=TRUE, echo=TRUE}
+library(cubature)
+adaptIntegrate(function(x) (abs(target.fun(x[1], x[2])))^2, lowerLimit = c(0,0), upperLimit = c(1,1))$integral
+```
+
+Once we verified the affinity with the *Hilbert space*, we built its orthonormal basis. In particular let $\left \{ \phi_0(\cdot ), \phi_1(\cdot ), \dots \right \}$ be the orthonormal basis for the space $\texttt{L}_2([0,1])$, then the function 
+$$\{\phi_{j_1j_2}(x_1,x_2) = \phi_{j_1}(x_1)\phi{j_2}(x_2) : j_1, j_2 = 0, 1, \dots\}$$ forms an orthonormal basis for $\texttt{L}_2([0,1] \times [0,1])$, called the *tensor product basis*.
+
+In this case we define the *tensor basis* from the usal *cosine basis*
+
+$$\phi_0(x) = 1 \quad \phi_j(x) = \sqrt{2}cos(j\pi x) \quad j > 1.$$
+
+```{r Basis, tidy=TRUE}
+# Define the basis functions ----------------------------------------------
+
+# Cosine-basis
+cos.basis = function(x, j){
+  return(1*(j == 0) + sqrt(2)*cos(pi*j*x)*(j > 0))
+}
+cos.basis.vec=Vectorize(cos.basis, vectorize.args = "x")
+
+# Since we know that the cosine basis is an orthonormal basis for L2[0,1], 
+# we affirm that the tensor basis, obtained as : phi(x1,x2) = phi(x1)*phi(x_2), 
+# is orthonormal too.
+
+# Tensor product basis
+tensor.basis = function(x_1, x_2, j1, j2){
+  return(cos.basis(x_1, j1) * cos.basis(x_2, j2))
+}
+tensor.basis.vec=Vectorize(tensor.basis, vectorize.args = c("j1","j2") )
+```
+
+In order to verify the orthonormality of the *tensor basis*, according to what we said previously, we just need to verify the orthonormality of the *cosin basis*. So we want to obtain that 
+$$
+\begin{cases}
+&\left \langle \phi_{j_{1}},\phi_{j_{2}} \right \rangle_{\texttt{L}_2}  = 0 \qquad \forall \quad j_{1} \neq j_{2}\\ 
+&\left \| \phi_j \right \|_{\texttt{L}_2}  = 1 \qquad \forall \quad j.\\
+\end{cases}
+$$
+
+```{r Orthogonormality cosine}
+grade=10
+# Declare a NA matrix
+orth_cos.basis = matrix(nrow=grade, ncol=grade)
+for (j in 0 : (grade-1)){
+  for (k in 0 : (grade-1)){
+# Compute the integral in [0,1] to verify that the basis elements satisfy the requirements
+    orth_cos.basis[(k+1),(j+1)] = round( integrate(function(x, j1, j2) tensor.basis(x, x, j1, j2),
+lower = 0, upper = 1, j1 = k, j2 = j)$value, 5)
+  }
+}
+orth_cos.basis
+```
+                                                   
+Hence, suppose that $\phi_0 = 1$, then any function that belongs to $\texttt{L}_2([0,1] \times [0,1])$, our *target* function can be expandend in a tensor basis as
+
+\begin{align*} 
+g(x_1,x_2 ) &= \sum_{j_1 = 0}^{\infty}\sum_{j_2 = 0}^{\infty}\beta_{j_1,j_2}\phi_{j_1,j_2}(x_1,x_2) =  \sum_{j_1 = 0}^{\infty}\sum_{j_2 = 0}^{\infty}\beta_{j_1,j_2}\phi_{j_1)(x_1)}\phi_{j_2}(x_2) &\\
+&= \beta_{0,0}+\sum_{j = 1}^{\infty}\beta_{j,0}\phi_j(x_1)+\sum_{j = 1}^{\infty}\beta_{0,j}\phi_j(x_2)+ \sum_{j_1 = 1}^{\infty}\sum_{j_2 = 1}^{\infty}\beta_{j_1,j_2}\phi_{j_1)(x_1)}\phi_{j_2}(x_2) \\
+\end{align*}
+
+where $\beta_{j_1,j_2}$ denotes the *Fourier* coefficient given by
+
+$$\beta_{j_1,j_2} = \left \langle g(x_1,x_2), \phi_{j_1,j_2}(x_1,x_2) \right \rangle_{\texttt{L}_2} = \int_{0}^{1}\int_{0}^{1}g(x_1,x_2)\phi_{j_1,j_2}(x_1,x_2)\mathrm{d}x_1 \mathrm{d}x_2$$
+
+that are the best to approximate the function. It derives from the extention of the theoretical explanation did in Exercise 1.
+
+
+```{r Fourier Coefficients, tidy=TRUE}
+# Fourier coefficients ----------------------------------------------------
+
+library(cubature)
+
+# Define the argument that we should integrate to compute the Fourier coefficients
+integrande.fun = function(x_1, x_2, j_1, j_2){
+ return( tensor.basis(x_1, x_2, j_1, j_2)*target.fun(x_1, x_2))
+}
+# Then we vectorize the function( for j_1 and j_2) in order to give vectors as input
+integrande.fun.vec= Vectorize(integrande.fun, vectorize.args=c("j_1","j_2"))
+
+# We create the Fourier coefficients matrix
+
+# At first we define a function to compute a single Fourier coefficient
+
+fourier.coef = function(j1, j2){
+  out = adaptIntegrate(function(x, j_1, j_2) integrande.fun(x[1], x[2], j_1, j_2),
+                                lowerLimit = c(0,0), upperLimit = c(1,1), 
+                                j_1 = j1, j_2 = j2, maxEval = 50000, 
+                                absError = 1e-4)$integral
+  return(out)
+}
+
+# Then we vectorize the function
+fourier.vec = Vectorize(fourier.coef)
+# And finally create the Fourier coefficient matrix
+fourier.matrix = function(j_1, j_2) {return(outer(0:j_1, 0:j_2, FUN = fourier.vec ))}
+```
+
+Hence, we are, finally, able to define our *linear* approximation for a pair $(J_1,J_2)$
+
+$$g_{J_1,J_2}(x_1,x_2) = \sum_{j_1 = 0}^{J_1-1}\sum_{j_2 = 0}^{J_2-1}\beta_{j_1,j_2}\phi_{j_1,j_2}(x_1,x_2)$$
+
+```{r Approx, tidy=TRUE}
+# Target function approximation ------------------------------------------
+library(cubature)
+# Define the function that computes the approximation of g given x1, x2 and j1 and j2
+approximate.fun = function(x.1, x.2, j1, j2){
+  vec_1 = c()
+  for(k in 0 : (j1-1)){
+    vec_2 = c()
+    for (i in 0 : (j2-1)){
+      vec_2[i+1] = coeff.matrix[k+1, i+1]*tensor.basis(x.1, x.2, k, i)
+    }
+  vec_1[k+1] = sum(vec_2)
+  }
+  out = sum(vec_1)
+  return(out)
+}  
+# Vectorize the approximation function
+approximate.vec = Vectorize(approximate.fun)
+
+# Define the matrix of values necessary to plot the approximated function
+approximate.matrix = function(x_1, x_2, j_1, j_2){
+  out = outer( x1, x2, FUN = approximate.vec, j1 = j_1 , j2 = j_2 )
+  return(out)
+}
+```
+
+### 2.2 and 2.3
+
+Now we choose three different cutoff pairs $(J_1,J_2)$ that allow us to get three different linear approximations for our *target* function.
+
+To pick these pairs we built a matrix of the loss for $J_1,J_2 = 1, \dots, 10$, where the loss is
+
+$$\left \| g(x_1,x_2) - g_{J_1,J_2}(x_1,x_2) \right \|^2_{L_2} = \int_{0}^{1}\int_{0}^{1} (g(x_1,x_2)-g_{J_1,J_2}(x_1,x_2))^2 \mathrm{d}x_1 \mathrm{d}x_2$$
+
+```{r eval appr ex2, tidy=TRUE}
+# Evaluate three different approximation ----------------------------------
+# Define the functin to compute the loss related to one approximation
+loss = function(j_1, j_2){
+  adaptIntegrate(function(x, j1, j2) (target.fun(x[1],x[2]) - approximate.vec(x[1],x[2],j1+1,j2+1))^2,
+                 lowerLimit = c(0,0), upperLimit = c(1,1), j1 = j_1, j2 = j_2, 
+                 maxEval = 50000, absError = 1e-4)$integral
+}
+# Define the matrix of the losses for different combination of beta's
+loss.vec=Vectorize(loss)
+loss.matrix = function( J1, J2 ) {
+                  out = outer(0:(J1-1), 0:(J2-1), FUN = loss.vec )
+                  return(out)
+                }
+```
+
+Here the matrix where the columns represent $J_2$ and the rows $J_1$.
+
+```{r loss matrix ex2, tidy=TRUE}
+J_1 = J_2 = 10
+coeff.matrix = fourier.matrix(J_1, J_2)
+err = loss.matrix(J_1,J_2)
+err
+```
+
+To get a stronger idea of the loss, we would like to plot the matrix.
+
+```{r plot loss matrix ex2, echo = FALSE, tidy=TRUE}
+# Define a function for plotting a matrix ----- #
+myImagePlot <- function(x, ...){
+    min <- min(x)
+    max <- max(x)
+    yLabels <- rownames(x)
+    xLabels <- colnames(x)
+    title <-c()
+    # check for additional function arguments
+    if( length(list(...)) ){
+        Lst <- list(...)
+        if( !is.null(Lst$zlim) ){
+            min <- Lst$zlim[1]
+            max <- Lst$zlim[2]
+        }
+        if( !is.null(Lst$yLabels) ){
+            yLabels <- c(Lst$yLabels)
+        }
+        if( !is.null(Lst$xLabels) ){
+            xLabels <- c(Lst$xLabels)
+        }
+        if( !is.null(Lst$title) ){
+            title <- Lst$title
+        }
+    }
+    # check for null values
+    if( is.null(xLabels) ){
+        xLabels <- c(0:(ncol(x)-1))
+    }
+    if( is.null(yLabels) ){
+        yLabels <- c(0:(nrow(x)-1))
+    }
+
+    layout(matrix(data=c(1,2), nrow=1, ncol=2), widths=c(4,1), heights=c(1,1))
+
+    # Red and green range from 0 to 1 while Blue ranges from 1 to 0
+    ColorRamp <- rgb( seq(0,1,length=256),  # Red
+                      seq(0,1,length=256),  # Green
+                      seq(1,0,length=256))  # Blue
+    ColorLevels <- seq(min, max, length=length(ColorRamp))
+
+    # Reverse Y axis
+    reverse <- (nrow(x)-1) : 0
+    yLabels <- yLabels[reverse+1]
+    x <- x[reverse+1,]
+
+    # Data Map
+    par(mar = c(3,5,7,2))
+    image(1:length(xLabels), 1:length(yLabels), log(t(x)), col=ColorRamp, xlab="",
+          ylab="", axes=FALSE, zlim=c(log(min),log(max)))
+    if( !is.null(title) ){
+        title(main=title)
+    }
+    axis(ABOVE<-3, at=1:length(xLabels), labels=xLabels, cex.axis=0.7)
+    axis(LEFT <-2, at=1:length(yLabels), labels=yLabels, las= HORIZONTAL<-1, cex.axis=0.7)
+
+    # Color Scale
+    par(mar = c(3,2.5,7,2))
+    image(1, log(ColorLevels),
+        matrix(data=log(ColorLevels), ncol=length(ColorLevels),nrow=1),
+        col=ColorRamp,
+        xlab="", ylab="", axes=F,
+        xaxt="n")
+    l_min = exp(floor(min(log(ColorLevels))))
+    l_max = exp(ceiling(max(log(ColorLevels))))
+    lab_leg = seq( from=log(l_min), to=log(l_max), length.out=5)
+    axis(2, at=lab_leg,
+         labels=format(signif(exp(lab_leg),2), scientific=TRUE), 
+         las= HORIZONTAL<-1, cex.axis=0.7)
+
+    layout(1)
+}
+
+myImagePlot(err, seq(0,10,1), seq(0,10,1), title=expression('Log-Loss :: J'['1'] ~ ', J'['2'] ~ ' = {1, ... , 10}'))
+```
+
+In particular we gather that the loss is maximum when $J_1 = J_2 = 0$, infact graphically we obtain a plane. Whether we set $J_1=0$ and vary $J_2$, the error commited by the approximation is slightly smaller, from `r err[1,1]` to `r err[1,10]`. It tells us that if we choose to create our approximation using just the elements of the basis that are proportional only to the cosine (where $J_2 > 0$), we will not improve  our approximation so much respect to the case $J_1=J_2=0$. In particulare the inclination is invariate and what change is just the shape of the sinusoide.
+
+On the other hand, when we alter $J_1$ and hold $J_2 = 0$, the loss slow down remarkably moving $J_1$ from $0$ to $1$ and then remain stable; from a graphical point of view the plane change its slope that goes towards the one of the *target* function. That is because in that case the basis elements are not only proportional to a cosine function.
+
+At least but not last we see that when both $J_1$ and $J_2$ are grater than 0, the loss go sharply towards zero. It tells us that to have a passing approximation of our target function we need just few basis elements. The latter could be proved by the fact that the values of $\beta$ become swiftly close to zero. Click [**here**](https://dl.dropboxusercontent.com/s/vdy14epibml9ce3/3DPlot_002.html?dl=0) to see the 3D plot.
+
+```{r plot coeff matrix ex2, echo = FALSE, webgl=TRUE, fig.align='center', tidy=TRUE}
+J_1 = seq(0,10,1)
+J_2 = seq(0,10,1)
+persp3d(x = J_1, y = J_2, coeff.matrix, col = 'green', xlab="j_1", ylab="j_2", zlab="beta_j")
+persp3D(x = J_1, y = J_2, coeff.matrix, col = 'green', xlab="j_1", ylab="j_2", zlab="beta_j")
+```
+
+
+As we see the *Fourier* coefficients could be considered not significantly greater than zero when $J_1,J_2$ are both greater than 6.
+
+As we can see graphically in the Log-Loss plot, a choose of an homogeneous  $J_1$ and $J_2$ is better than a non-homogeneous one. In particular we notice how the colour of the cells referring to the diagonal of the matrix get dark faster than the ones outside the diagonal.
+Furthermore analyzing the matrix *err* considering only the matrix diagonal we see that the first six terms decrease of an order of magnitude one step by step. From this point the loss decreases of a little quantity. That is why, generally, also according to the computational cost, we prefer small values of J.
+We resume the matrix diagonal below:
+
+$$```{r} 
+diag(err)
+```
+$$
+
+After this assumptions decide to consider and choose as Js the following three cases:
+
+* $J_1=J_2=6$
+* $J_1=J_2=10$
+* $J_1=10 , J_2=6$
+
+
+
+1. $J_1 = J_2 = 6$, whose plot is [**here**](https://dl.dropboxusercontent.com/s/7p7kghadx5d9qpd/3DPlot_003.html?dl=0) and the loss is $`r signif(loss(6,6),2)`$
+```{r plot 66 matrix ex2, echo = FALSE, webgl=TRUE, fig.align='center', tidy=TRUE}
+z = approximate.matrix(x1, x2, 6, 6)
+persp3d(x = x1, y = x2, f, col = 'red')
+persp3d(x = x1, y = x2, z,col = 'blue', add = T)
+persp3D(x = x1, y = x2, f, col = 'red')
+persp3D(x = x1, y = x2, z,col = 'blue', add = T)
+```
+
+\clearpage
+
+2. $J_1 = J_2 = 10$, whose plot is [**here**](https://dl.dropboxusercontent.com/s/1wujfdce1ef20qj/3DPlot_004.html?dl=0) and the loss is $`r signif(loss(10,10),2)`$
+
+```{r plot 1010 matrix ex2, echo = FALSE, webgl=TRUE, fig.align='center', tidy=TRUE}
+z = approximate.matrix(x1, x2, 10, 10)
+persp3d(x = x1, y = x2, f,col = 'red')
+persp3d(x = x1, y = x2, z,col = 'blue', add = T)
+persp3D(x = x1, y = x2, f,col = 'red')
+persp3D(x = x1, y = x2, z,col = 'blue', add = T)
+```
+
+Of course the loss of the second approximation is better than the first one. But  we want to stress that due to the fact the both quantities are extreamely small, we can consider respectable either the first and the second approximation.
+
+3. $J_1 = 10, \quad J_2 = 6$ whose plot is [**here**](https://dl.dropboxusercontent.com/s/1tszqwbexf1lern/3DPlot_005.html?dl=0) and the loss is $`r signif(loss(10,6),2)`$
+
+```{r plot 106 matrix ex2, echo = FALSE, webgl=TRUE, fig.align= 'center', tidy=TRUE}
+z = approximate.matrix(x1, x2, 10, 6)
+persp3d(x = x1, y = x2, f,col = 'red')
+persp3d(x = x1, y = x2, z,col = 'blue', add = T)
+persp3D(x = x1, y = x2, f,col = 'red')
+persp3D(x = x1, y = x2, z,col = 'blue', add = T)
+```
+
+
+Generally, considering the function $g(x_1,x_2) = x_1 + cosx_2$, we notice that when $\phi_{0,0} = 1$ and $\phi_{j_1,j_2} \propto cos(\cdot)$( where $j_1,j_2 = 0, 1, \dots$) we are able to obtain an approximation of the *target* just with a simple linear combination of, the above mentioned, $\phi$. That is an alternative explanation for the fact that we choose small values J's to get a reasonable approximation.
+
+Moreover, paying attention on the error matrix we notice that the loss decrease quickly if the J's grow homogeneously. In addition, we can numerically show that if we compare the loss of the J's combination where $J_1+J_2 = k$, the one with the smallest loss is the one where $J_1=J_2=\frac{k}{2}$.
+
+Although the homogeneous J's have smaller losses, we observe also that the differences between the *homogeneous* and the *non-homogeneous* J's decreases increasing the values of J's. 
+
+\clearpage
+
+## Exercise 3
+
+```{r, echo=FALSE, tidy=TRUE}
+library("ellipse")
+library("viridis")
+library("corrplot")
+
+```
+
+### 3.1 and 3.2 Problem setting and covariates mulitcollineariy 
+
+In this exercise we have typical chemometrics highly dimensional dataset, with $n=28$ observation and $r=268$ covariates, meaning that we have $r>>n$.
+With this data we want to study the relationship between the overall density of a PET yarn to its NIR spectrum by fitting a linear regression model, however, since the number of covariates is bigger than the observation, we must select lower number of covariates respect to the number of observations.
+First of all let's load the data in memory and rearrange them.
+
+```{r, results='hide', tidy=TRUE}
+
+#Step 1: load data into memory
+
+PET = read.csv('PET.txt', sep=" ")
+range=1:21
+PET.train=PET[range,-270]
+PET.test=PET[-range,-270]
+# Define the train set
+y.tr = PET.train[ , 269]
+X.tr = PET.train[ , -269]
+# Define the test set
+y.te = PET.test[ , 269]
+X.te = PET.test[ , -269]
+
+Z.tr = data.frame(X.tr)
+Z.te = data.frame(X.te)
+
+apply(Z.tr, 2, mean)
+apply(Z.tr,2,sd)
+
+round( apply(Z.tr, 2 , function(x) c(mean(x), sd(x))), 10)
+```
+
+By plotting the dataset's NIR spectra we see that the covariates (frequencies) have very similar characteristics, although there are noticeable differences in some curves. This information gives us an insight that probably our covariates set suffers of multicollinearity and fitting a linear regression with the wrong one would lead our model to overfitting. 
+
+```{r, echo=FALSE, fig.cap="Raman NIR spectra of the polyethylene tereph-thalate (PET) yarns sample. the spectra appear to have very similar characteristics, although there are noticeable differences in some curves" , fig.align='center', tidy=TRUE}
+
+#Step 2: correlation structure of covariates
+#As we can see from the plot the data of this sata
+mycol = viridis(21, alpha = 0.8)
+matplot( t(PET[,-c(269,270)]),
+         type = "l", lty = 1, lwd = 2.5,
+         col = mycol,
+         main = "Raman Intensity",
+         xlab = "frequency-number",
+         ylab = "spectral density"
+)
+```
+
+Those hints suggest us that we need some kind of automated machinery that pick for us the most uncorrelated covariates among them to predict the output.
+In out case we will use: Stepwise Forward Selection Search.
+
+
+### 3.3 Stepwise Forward Selection Search and validation techniques
+
+The *stepwise forward selection search* will select for us the 21 most important covariates with respect to the PET density.
+This method computes iterativly the correlation between each covariates and the residuals of the output and the active set of covariates.
+
+
+```{r Forward Selection Search, warning=FALSE, tidy=TRUE}
+fwd.reg <- function(y, X, k.max = ncol(X), stand = TRUE){
+  # Standardize if asked
+  if (stand) X <- scale(X)
+  # Initialize variable sets & other quantities
+  S = NULL
+  # active set
+  U = 1:ncol(X)
+  # inactive set
+  k.loc = 0
+  # current active set dim
+  ee = y
+  # Loop
+  while (k.loc < k.max){
+    ## Update loop-index
+    k.loc = k.loc + 1
+    ## Step 1: Evaluate correlation with inactive variables
+    rr = abs( cor(X[,U], ee) )
+    ## Step 2: Extract the most correlated variable & update the sets
+    J = U[which.max(rr)]
+    S = c(S, J)
+    U = U[-which.max(rr)]
+    ## Step 3: Regress on active var's and get residuals
+    ee = resid( lm(y ~ X[,S]) )
+  }
+  # Output
+  return(S)
+}
+
+S.hat = fwd.reg(y.tr, X.tr)
+print(c("Frequency number (covariates) selected by SFWDS:", S.hat), quote = FALSE)
+```
+
+The $\texttt{S.hat}$ variable is an array containing the index of the most explicative covariates selected by SFWDS.
+
+This is an empirical technique filtered for us the most correlated covariates with the output, but SFWDS is strongly criticized for the following reason, expecially in multicollinearity settings:
+
+* Whether the input variables are highly correlated the stepwise methods can lead to confusing conclusions;
+
+* It is not sure that the set of variables obtained by the forward selection contains the "best" subset of covariates;
+
+* The single answer returned by a stepwise procedure may not necessary be the only good solution for regression purposes.
+
+This push us checking for which subset of covariates this subset is useful. We need some kind of validation techniques that tell us which of the subset is better than the other, so we define four functions that we will use to computer the optimal k.
+
+We will use four validation techniques
+
+* Train-Test Split
+* K-fold cross-validation
+* Leave-One-Out cross-validation
+* Approximated Leave-One-Out cross-validation
+
+#### 3.3.a - Train-Test Split
+
+The first validation technique that we try to get an optimal-k is the Train-Test Split validation tecnique. With this technique we simply split our dataset in two part: Train (21 observations) and Test (7 observations) and fit a linear model on the train set. Using this model we compute the MSE between the predicted output and the model fitted over the test set and the real values of the test set.
+
+```{r, tidy=TRUE}
+TTS = function(S.hat, mod){
+  # FWD-selected test set - only covariates
+  z.te <- Z.te[, S.hat, drop = FALSE]
+  # Predict on the FWD-selected test set
+  y.hat <- predict(mod, z.te )
+  # Evaluate empirical MSE
+  return(mean((y.te - y.hat)^2))
+}
+```
+
+#### 3.3.b - K-Fold Cross-Validation
+
+K-fold cross validation is a method to assess the predictive expressivness of a model. The data set is divided into k subsets, in our specific case 5, by a random permutation of the rows index.
+At each iteration, one of the k subsets is used as a test-set and the other k-1 subsets are combined and used as a train set. Then the average of the errors in all k tests is calculated by averaging the errors obtained.
+
+
+The advantage of this method is that how the split is performed is not so influential on the final result, infact, each fold at the end of the execution is used one time as test set, and k-1 times as a train set. The variance of the estimate is reduced increasing the number of k (folds).
+The disadvantage of this method is that the training algorithm must be executed k times, which means that it takes at least k times to make an evaluation.
+
+
+![The conceptual scheme of a 5-fold cross-validation](B-fig-1.jpg)
+
+```{r, tidy=TRUE}
+KF= function(S.hat, idx){
+  if(idx>15) return(NA)
+  set.seed(123)
+  nfold = 5
+  rarr = sample(1:nrow(PET.train))
+  nFold.train = PET.train[S.hat]
+  nFold.train["y"] = y.tr
+  
+  score = c()
+  aux = c(1:4)
+  
+  for (k in 1:nfold){
+    if(k==nfold){
+      idxFold = rarr[c(aux,c((aux[4]+1):length(rarr)))]
+    }else{
+      idxFold = rarr[aux]
+    }
+    y.aux1=y.tr[-idxFold]
+    dat <- data.frame( y.aux1, z.tr <- Z.tr[-idxFold, S.hat, drop = FALSE] )
+    mod <- lm(y.aux1 ~ ., data = dat)
+    z.tr <- Z.tr[idxFold, S.hat, drop = FALSE]
+    y.hat <- predict(mod, z.tr)
+    y.hat
+    score[k] = mean((y.tr[idxFold]-y.hat)^2)
+    aux = aux + 4
+  }
+  return(mean(score))
+}
+
+```
+
+#### 3.3.c Leave-One-Out Cross-validation
+
+The Leave-One-Out is a special case of K-fold where the folds are exactly the number of the observation (in our case 21).
+
+![The conceptual scheme of a leave-one-out cross-validation](slide_35.jpg)
+
+As one could imagine from the above scheme the Leave-One-Out in principle would be very expensive to compute but the analytical formula of the error allows us to compute the error in one shot by fitting just one model:
+
+$$\hat{R}_{LOO(S)} = \frac{1}{n}\sum^n_{i=1}\left(\frac{Y_i-\hat{Y}_i(S)}{1-\mathbb{H}_{i,i}(S)}\right)^2$$
+
+where $\mathbb{H}_{i,i}(S)$ is the $i^{th}$ diagonal element of the hat matrix
+
+$$\mathbb{H}(S) = \mathbb{X}_S(\mathbb{X}_S^T\mathbb{X}_S)^{-1}\mathbb{X}^T_S$$
+
+where $\mathbb{X}$ is the design matrix.
+
+The main drawback of the LOO is that the resulting MSE is affected by an higher variance than k-fold (the training sets in LOO have more overlap. This makes the estimates from different folds more dependent than in the k-fold, and hence increases the overall variance).
+
+```{r Leave-One-Out Scorer, tidy=TRUE}
+LOO1 = function(S.hat, mod){
+  z.tr <- Z.tr[, S.hat, drop = FALSE]
+  y.hat = predict(mod, z.tr)
+  
+  LOO = data.matrix(Z.tr[S.hat])
+  H_hat2 = LOO%*%solve(t(LOO)%*%LOO)%*%t(LOO)
+  somma = 0
+  for(k in 1:21){
+    somma = somma + ((y.tr[k]-y.hat[k])/(1-H_hat2[k,k]))^2
+  }
+  return(somma/21)
+}
+```
+
+#### 3.3.d - Approximated Leave-One-Out Cross-Validation
+
+The approximated version of the LOO allows us to avoid the computation of the H-hat matrix which implies the computation of an inverse of a matrix ($(\mathbb{X}_S^T\mathbb{X}_S)^{-1}$ which has a cubic cost $O(n^3)$). So we approximate the previous formula with:
+
+$$\hat{R}_{LOO(S)} = \frac{1}{n}\sum^n_{i=1}\left(\frac{Y_i-\hat{Y}_i(S)}{1-\frac{\left\vert{S}\right\vert}{n}}\right)^2$$
+
+where we have approximated $\mathbb{H}_{i,i}(S)$ with its average value:
+
+$$\frac{1}{n}\sum^n_{i=1}(\mathbb{H}_{i,i}(S))=\frac{trace(\mathbb{H}(S))}{n}=\frac{\left\vert{S}\right\vert}{n}$$
+
+
+
+```{r Approximated Leave-One-Out Scorer,tidy=TRUE}
+LOO2 = function(S.hat, mod){
+  z.tr <- Z.tr[, S.hat, drop = FALSE]
+  y.hat = predict(mod, z.tr)
+  
+  somma=0
+  for(k in 1:21){
+    somma = somma + ((y.tr[k]-y.hat[k])/(1-20/21))^2
+  }
+  return(somma/21)
+}
+```
+
+### Conclusions 
+
+The meaty part! At the beginning of our journey we where looking for using SFWDS and the validation techniques to get the optimal model to predict our output avoiding multicollinearity and hence overfitting. We now have to compute those optimal models!
+The following chunk of code that computes for us in one shot the optimal k (hence the optimal model) respect to each specific validation technique.
+
+```{r Compute k-top, , fig.align="center",tidy=TRUE}
+scorers = list("Test-Train Split ","K-fold C-V",
+               "Leave-One-Out C-V", "Approx. LOO C-V")
+
+compute.ktop = function(S.hat){
+  # Initialize the vectors of scores
+  modelTTS.score <- rep(NA, length(S.hat))
+  modelKF.score <- rep(NA, length(S.hat))
+  modelLOO1.score <- rep(NA, length(S.hat))
+  modelLOO2.score <- rep(NA, length(S.hat))
+  # Loop
+  for (idx in 1:length(S.hat)){
+    # Build the data.frame with the FWD-selected variables
+    # To understand the option "drop = FALSE" read the help file: ?"["
+    dat <- data.frame( y.tr, z.tr <- Z.tr[, S.hat[1:idx], drop = FALSE] )
+    # Fit the linear model on FWD-selected training data
+    mod <- lm(y.tr ~ ., data = dat)
+    
+    modelTTS.score[idx] = TTS(S.hat[1:idx], mod)
+    modelKF.score[idx] = KF(S.hat[1:idx], idx)
+    modelLOO1.score[idx] = LOO1(S.hat[1:idx], mod)
+    modelLOO2.score[idx] = LOO2(S.hat[1:idx], mod)
+  }
+  # Optimal number of covariates
+  
+  par(mfrow=c(2,2), plt=c(1,1,2,2), mar=c(2,2,3,3))
+  k1= which.min(modelTTS.score)
+  plot.k.opt(modelTTS.score, k1, scorers[[1]])
+  #print(modelTTS.score)
+  k2=which.min(modelKF.score)
+  plot.k.opt(modelKF.score, k2, scorers[[2]])
+  #print(modelKF.score)
+  k3=which.min(modelLOO1.score)
+  plot.k.opt(modelLOO1.score, k3, scorers[[3]])
+  #print(modelLOO1.score)
+  k4=which.min(modelLOO2.score)
+  plot.k.opt(modelLOO2.score, k4 , scorers[[4]])
+  #print(modelLOO2.score)
+  
+  return(c(k1,k2,k3,k4))
+
+}
+```
+
+Now that we have a function to compute the optimal k with respect each model, we need a function to plot the results in a way that we are able to visualize them and see how much this optimal k with respect to each one of those is better with respect to the others.
+
+```{r plot, fig.cap="MSE plot of each model with respect the four scorer", fig.align='center', tidy=TRUE}
+plot.k.opt = function(model.score ,k.opt, scorer){
+  plot(model.score, pch = 21, bg = "yellow", xlim = c(0,25), cex = .7,
+       main = scorer,
+       ylab = "RSS-Test")
+  points(k.opt, model.score[k.opt], pch = 21, cex = 1.5,
+         col = "darkred", bg = rgb(1,0,0,.3))
+  text(k.opt, model.score[k.opt], expression(k[opt]),
+       cex = .7, pos = 3)
+  grid()
+  
+}
+```
+
+Now that we have coded the plot function we are able to compute and display the optimal model with respect to each model we just run it.
+
+\clearpage
+
+```{r main, tidy=TRUE}
+k.opt = compute.ktop(S.hat)
+k.opt
+```
+
+From the four plots we can clearly see that the four validation techiniques resulted in three different values of k and hence three different models. The next step is to understand which one of those is better with respect to our test set.
+Now we simply fit three linear models with k = 10, 14, 20 and compute the MSE with respect to the test set.
+
+```{r test, tidy=TRUE, results='hold'}
+corMat=list()
+k=1
+for(i in k.opt){
+    dat = data.frame( y.tr, z.tr <- Z.tr[, S.hat[1:i], drop = FALSE] )
+    mod = lm(y.tr ~ ., data = dat)
+    mod.sum = summary(mod)
+    y.hat = predict(mod, Z.te[, S.hat[1:i], drop = FALSE])
+    print(matrix(c(scorers[[k]], i, mod.sum$r.squared, mean(resid(mod)^2), mean((y.te - y.hat)^2)), nrow=1, ncol=5, 
+    dimnames=list(c(),c("validation technique", "Optimal K:", "R-squared", "RSS-train", "RSS-test"))))
+    corMat[[k]] = data.matrix(Z.tr[, S.hat[1:i]])
+    k = k +1
+}
+```
+
+The first thing that we clearly see is that the R-squared value is approximately equal to one for each of those models.
+
+### Comments
+
+The code below produces a vector *corMat* which elements are the correlation matricies of the different models.
+
+```{r significance}
+cor.mtest <- function(mat, conf.level = 0.95){
+  mat <- as.matrix(mat)
+    n <- ncol(mat)
+    p.mat <- lowCI.mat <- uppCI.mat <- matrix(NA, n, n)
+    diag(p.mat) <- 0
+    diag(lowCI.mat) <- diag(uppCI.mat) <- 1
+    for(i in 1:(n-1)){
+        for(j in (i+1):n){
+            tmp <- cor.test(mat[,i], mat[,j], 
+                   alternative = "two.sided",conf.level = conf.level)
+            p.mat[i,j] <- p.mat[j,i] <- tmp$p.value
+            lowCI.mat[i,j] <- lowCI.mat[j,i] <- tmp$conf.int[1]
+            uppCI.mat[i,j] <- uppCI.mat[j,i] <- tmp$conf.int[2]
+        }
+    }
+    return(list(p.mat, lowCI.mat, uppCI.mat))
+}
+```
+
+To understand how much multicollinearity affect our subset of covariates is useful to use visualization and clustering. With this goal in mind we define a function that performs a double-sided Test( at leve 0.95) for correlation between each pair of covariates in the the design matrix.
+
+Then for each of the three model we plot the *absolute correlation matrix* ordered using herarcical clustering up to a point where no tick is present within any cluster, in a way that we can consider any vector in the cluster "replaceable" with another in that specific cluster.
+
+\clearpage
+
+_Important remark:_
+
+We use the absolute correlation matrix because the multicollinearity affects not only almost correlated covariates, but also almost anticorrelated variable because they span the same subspace, but, since hierarcical clustering is defined only for positive distances, we get the absolute values of the matrix and run it as there was no anticorrelation.
+
+```{r model1, echo=FALSE, tidy=TRUE, fig.align='center'}
+res1 <- cor.mtest(corMat[[1]],0.95)
+corrplot(abs(cor(corMat[[1]])),p.mat = res1[[1]], order="hclust" , insig = "pch", addrect=1, title=scorers[[1]] , mar=c(0,0,2,0))
+```
+
+For the first model with k = 10 we clearly see that we are able to create 4 different clusters in which the covariates have passed the correlation test among themselfs. This implies that in order to avoid  multicollinearity we should select 4 out of 10 covariates to rappresent the whole subset and drop the other 6.
+
+```{r model2, echo=FALSE, tidy=TRUE, fig.align='center'}
+res2 <- cor.mtest(corMat[[2]],0.95)
+corrplot(abs(cor(corMat[[2]])),p.mat = res2[[1]], order="hclust" , insig = "pch", title=scorers[[2]], addrect=5, mar=c(0,0,2,0))
+```
+
+For the second model with k = 14 we see that we can produce a minimum of 5 clusters without any tick in it. This suggest us that in this case just one out the four new covariates it is really useful to improve our model.
+
+```{r model3, echo=FALSE, tidy=TRUE, fig.align='center'}
+res3 <- cor.mtest(corMat[[3]],0.95)
+corrplot(abs(cor(corMat[[3]])),p.mat = res3[[1]], order="hclust" , insig = "pch", addrect=5, title=scorers[[3]] , mar=c(0,0,2,0))
+```
+
+In the last model, which is rapresentative for both the LOO and the approximated LOO, we have k=20. Even in this case the cluster are 5, meaning that none of the new covariates are really useful to improve our model: none of them is spanning a new subset of the space.
+
+With this analysis of the clustered absolute correlation matricies we see that the stepwise foward search is not really able to detect an optimal subset of covariates even if coupled with cross validation. Our K = 10, 14, 20 are clearly affected by multicollinearity inducing our model to be overfitted on our specific dataset, infact we have $R^2 \approx 1$, for each of three models.
